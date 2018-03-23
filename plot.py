@@ -21,5 +21,5 @@ def plot_lattice(lattice, show=True):
         plt.show()
 
 def plot_heatmap(data):
-    plt.imshow(data, cmap='hot', interpolation='nearest')
+    plt.imshow(data, cmap='binary', interpolation='nearest')
     plt.show()

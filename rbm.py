@@ -28,41 +28,41 @@ def gen_even_slices(n, n_packs, n_samples=None):
 def reformat_data(data):
 	return data.reshape((28, 28))
 
-train_data = []
-test_data = []
+def run(train_data, test_data):
+	batch_size=10
+	n_samples = np.array(train_data).shape[0]
+	n_batches = int(np.ceil(float(n_samples) / batch_size))
+	batch_slices = list(gen_even_slices(n_batches * batch_size, n_batches, n_samples))
 
-with open('binMNIST_data\\bindigit_trn.csv') as f:
-	reader = csv.reader(f)
-	for row in reader:
-		train_data.append(np.array([int(_) for _ in row]))
+	nodes = [50, 75, 100, 150]
 
-with open('binMNIST_data\\bindigit_tst.csv') as f:
-	reader = csv.reader(f)
-	for row in reader:
-		test_data.append(np.array([int(_) for _ in row]))
+	for item in nodes:
+		errors = []
+		model = BernoulliRBM(n_components=item, learning_rate=0.1, batch_size=10, n_iter=1, 
+		random_state=None, verbose=1)
+		for _ in range(20):
+			for batch_slice in batch_slices:
+				model.partial_fit(train_data[batch_slice])
+			errors.append(percent_error(model.gibbs(test_data), test_data))
+		plot.plot_points(errors)
+		plot.plot_heatmap(reformat_data(test_data[0]))
+		plot.plot_heatmap(reformat_data(model.gibbs(test_data)[0]))
+		
+		if item == 50 or item == 100:
+			plot.plot_heatmap(model.__dict__['components_'].reshape(item,784))
 
+if __name__ == "__main__":
+	train_data = []
+	test_data = []
 
+	with open('binMNIST_data\\bindigit_trn.csv') as f:
+		reader = csv.reader(f)
+		for row in reader:
+			train_data.append(np.array([int(_) for _ in row]))
 
-batch_size=10
-n_samples = np.array(train_data).shape[0]
-n_batches = int(np.ceil(float(n_samples) / batch_size))
-batch_slices = list(gen_even_slices(n_batches * batch_size, n_batches, n_samples))
+	with open('binMNIST_data\\bindigit_tst.csv') as f:
+		reader = csv.reader(f)
+		for row in reader:
+			test_data.append(np.array([int(_) for _ in row]))
 
-nodes = [50, 75, 100, 150]
-
-for item in nodes:
-	errors = []
-	model = BernoulliRBM(n_components=item, learning_rate=0.1, batch_size=10, n_iter=1, 
-	random_state=None, verbose=1)
-	for _ in range(20):
-		for batch_slice in batch_slices:
-			model.partial_fit(train_data[batch_slice])
-		errors.append(percent_error(model.gibbs(test_data), test_data))
-	plot.plot_points(errors)
-	plot.plot_heatmap(reformat_data(test_data[0]))
-	plot.plot_heatmap(reformat_data(model.gibbs(test_data)[0]))
-	
-	if item == 50 or item == 100:
-		plot.plot_heatmap(model.__dict__['components_'].reshape(item,784))
-
-
+	run(train_data, test_data)
