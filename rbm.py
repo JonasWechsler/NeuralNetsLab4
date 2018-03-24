@@ -1,62 +1,68 @@
 import numpy as np
 import csv
+import plot
 from sklearn.neural_network import BernoulliRBM
 
 def error(a, b):
-    return (a != b).sum()
+	return (a != b).sum()
 
 def percent_error(a, b):
-    return sum(error(*x) for x in zip(a, b))/float(len(a)*len(a[0]))
+	return sum(error(a[i], b[i]) for i in range(len(a)))/float(len(a)*len(a[0]))
 
-train_data = []
-with open('binMNIST_data\\bindigit_trn.csv') as f:
-	reader = csv.reader(f)
-	for row in reader:
-		train_data.append(np.array([int(_) for _ in row]))
+def gen_even_slices(n, n_packs, n_samples=None):
+    start = 0
+    if n_packs < 1:
+        raise ValueError("gen_even_slices got n_packs=%s, must be >=1"
+                         % n_packs)
+    for pack_num in range(n_packs):
+        this_n = n // n_packs
+        if pack_num < n % n_packs:
+            this_n += 1
+        if this_n > 0:
+            end = start + this_n
+            if n_samples is not None:
+                end = min(n_samples, end)
+            yield slice(start, end, None)
+            start = end
 
-test_data = []
-with open('binMNIST_data\\bindigit_tst.csv') as f:
-	reader = csv.reader(f)
-	for row in reader:
-		test_data.append(np.array([int(_) for _ in row]))
+def reformat_data(data):
+	return data.reshape((28, 28))
 
-def make_rbm(data, components=50, n_iter=10):
-    model = BernoulliRBM(n_components=components, learning_rate=0.1, batch_size=10, n_iter=n_iter, 
-    	random_state=None, verbose=0)
-    model = model.fit(data)
-    print("error: {}".format(percent_error(model.gibbs(data), data)))
-    return model
+def run(train_data, test_data):
+	batch_size=10
+	n_samples = np.array(train_data).shape[0]
+	n_batches = int(np.ceil(float(n_samples) / batch_size))
+	batch_slices = list(gen_even_slices(n_batches * batch_size, n_batches, n_samples))
 
-def make_dbn(data, components=[150,50], iterations=[10,10]):
-    result = []
-    for size, n_iter in zip(components, iterations):
-        rbm = make_rbm(data, components=size, n_iter=n_iter)
-        result.append(rbm)
-        #data = rbm._sample_hiddens(data, rbm.random_state_)
-        #print(data.shape)
-        data = np.round(rbm._mean_hiddens(data)).astype(int)
-        print(data.shape)
-    return result
+	nodes = [50, 75, 100, 150]
 
-def run_together(data, layers):
-    for layer in layers:
-        data = layer._sample_hiddens(data, layer.random_state_)
-    for layer in reversed(layers):
-        data = layer._sample_visibles(data, layer.random_state_)
-    return data
+	for item in nodes:
+		errors = []
+		model = BernoulliRBM(n_components=item, learning_rate=0.1, batch_size=10, n_iter=1, 
+		random_state=None, verbose=1)
+		for _ in range(20):
+			for batch_slice in batch_slices:
+				model.partial_fit(train_data[batch_slice])
+			errors.append(percent_error(model.gibbs(test_data), test_data))
+		plot.plot_points(errors)
+		plot.plot_heatmap(reformat_data(test_data[0]))
+		plot.plot_heatmap(reformat_data(model.gibbs(test_data)[0]))
+		
+		if item == 50 or item == 100:
+			plot.plot_heatmap(model.__dict__['components_'].reshape(item,784))
 
-dbn = make_dbn(train_data, [512, 50], [1, 500])
+if __name__ == "__main__":
+	train_data = []
+	test_data = []
 
-#first = make_rbm(train_data, 150)
-#first_out = first._sample_hiddens(train_data, first.random_state_)
-##first_out = np.round(first._mean_hiddens(train_data)).astype(int)
-#
-#second = make_rbm(first_out, 50)
+	with open('binMNIST_data\\bindigit_trn.csv') as f:
+		reader = csv.reader(f)
+		for row in reader:
+			train_data.append(np.array([int(_) for _ in row]))
 
-print("sample / sample error: {}".format(percent_error(dbn[0]._sample_hiddens(train_data, dbn[0].random_state_), dbn[0]._sample_hiddens(train_data, dbn[0].random_state_))))
-print("rounded mean / sample error: {}".format(percent_error(np.round(dbn[0]._mean_hiddens(train_data)).astype(int), dbn[0]._sample_hiddens(train_data, dbn[0].random_state_))))
+	with open('binMNIST_data\\bindigit_tst.csv') as f:
+		reader = csv.reader(f)
+		for row in reader:
+			test_data.append(np.array([int(_) for _ in row]))
 
-print("train error: {}".format(percent_error(run_together(train_data, dbn), train_data)))
-
-print("first layer total error: {}".format(percent_error(dbn[0].gibbs(test_data), test_data)))
-print("total error: {}".format(percent_error(run_together(test_data, dbn), test_data)))
+	run(train_data, test_data)
